@@ -35,7 +35,7 @@ func main() {
 			msgCh: make(chan string),
 		}
 		go handleIncomingRequest(client)
-		close(client.msgCh)
+	
 		// conn.Close()
 	}
 	
@@ -69,7 +69,8 @@ func handleIncomingRequest(client *Client) {
 	clientMux.Lock()
 	clients[client] = true
 	clientMux.Unlock()
-	broadcast(fmt.Sprintf("%s has joined the caht", client.name))
+	//client.conn.Write([]byte(fmt.Sprintf("%s has joined the caht", client.name)))
+	broadcast(fmt.Sprintf("%s has joined the chat", client.name))
 	go client.receiveMessages()
 
  	for msg := range client.msgCh {
@@ -82,20 +83,24 @@ func handleIncomingRequest(client *Client) {
     delete(clients, client)
     clientMux.Unlock()
 	broadcast(fmt.Sprintf("%s has left the chat", client.name))
-	close(client.msgCh)
+	
 
 }
 
 func (client *Client) receiveMessages() {
 	scanner := bufio.NewScanner(client.conn)
 	
-	for scanner.Scan() {
-		message := scanner.Text()
-		times := time.Now().Format("2002-12-06 12:32:12")
-		broadcast(fmt.Sprintf("[%s][%s]:%s\n", times, client.name, message))
-	}
 	
+		times := time.Now().Format("2006-01-02 15:04:05")
+		for scanner.Scan(){
+			broadcast(fmt.Sprintf("[%s][%s]:%s\n", times, client.name, scanner.Text())) 
+		}
+		
+		
+		
+
 	
+	close(client.msgCh)
 }
 
 func broadcast(message string) {
@@ -104,8 +109,9 @@ func broadcast(message string) {
 	for client := range clients {
 		select {
         case client.msgCh <- message:
+			//fmt.Println("send messages")
         default:
-            fmt.Printf("Failed to send message to client %s\n", client.name)
+           // fmt.Printf("Failed to send message to client %s\n", client.name)
         }
 	}
 }
