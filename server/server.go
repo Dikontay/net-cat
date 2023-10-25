@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net"
-	"os"
 	"time"
 )
 
@@ -19,30 +18,41 @@ func main() {
 	defer listen.Close()
 	for {
 		conn, err := listen.Accept()
+
 		handleErrors(err)
 		go handleIncomingRequest(conn)
-
+		//conn.Close()
 	}
 
 }
 
 func handleIncomingRequest(conn net.Conn) {
 	//store incoming data
-	buffer := make([]byte, 1024)
-	_, err := conn.Read(buffer)
+	name := make([]byte, 1024)
+	conn.Write([]byte("Please enter your name:"))
+	_, err := conn.Read(name)
 	handleErrors(err)
-	//respond
-	time := time.Now().Format("Monday, 02-Jan-06 15:04:05 MST")
-	//fmt.Println(buffer)
-	conn.Write([]byte("Hi back!"))
-	conn.Write([]byte(time))
-	conn.Write(buffer)
+	//fmt.Print(string(name))
+	//fmt.Print(name)
+	for {
+		timestap := time.Now().Format("02-Jan-06 15:04:05 MST")
+		//fmt.Println(buffer)
+		conn.Write([]byte(fmt.Sprintf("%s %s: ", string(name), timestap)))
+		buffer := make([]byte, 1024)
+		_, err = conn.Read(buffer)
+		if err != nil {
+			fmt.Printf("User %s has left.\n", string(name))
+			break
+		}
+
+	}
 	conn.Close()
+	//respond
+
 }
 
 func handleErrors(err error) {
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
 	}
 }
