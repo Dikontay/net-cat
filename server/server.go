@@ -90,10 +90,12 @@ func handleIncomingRequest(client *Client) {
 func (client *Client) receiveMessages() {
 	scanner := bufio.NewScanner(client.conn)
 	
-	
-		times := time.Now().Format("2006-01-02 15:04:05")
+		var msg string
+		
 		for scanner.Scan(){
-			broadcast(fmt.Sprintf("[%s][%s]:%s\n", times, client.name, scanner.Text())) 
+			times := time.Now().Format("2006-01-02 15:04:05")
+			msg = scanner.Text()
+			broadcast(fmt.Sprintf("[%s][%s]:%s\n", times, client.name, msg )) 
 		}
 		
 		
