@@ -1,128 +1,158 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"net"
+	"os"
+	"strings"
 	"sync"
 	"time"
 )
 
 type Client struct {
-	conn  net.Conn
-	name  string
-	msgCh chan string
+	Name   string
+	Writer *bufio.Writer
+}
+
+type Message struct {
+	Message string
+	Sender  *Client
 }
 
 var (
-	HOST      = "localhost"
-	PORT      = "3000"
-	TYPE      = "tcp"
 	clients   = make(map[*Client]bool)
-	clientMux sync.Mutex
+	serverMux = &sync.Mutex{}
+	messages  = make(chan Message)
 )
 
 func main() {
-	listen, err := net.Listen(TYPE, HOST+":"+PORT)
-	handleErrors(err)
-	defer listen.Close()
-	for {
-		conn, err := listen.Accept()
-
-		handleErrors(err)
-		client := &Client{
-			conn:  conn,
-			msgCh: make(chan string),
-		}
-		go handleIncomingRequest(client)
-
-		// conn.Close()
+	listener, err := net.Listen("tcp", ":3000")
+	defer listener.Close()
+	if err != nil {
+		fmt.Println("error with listening")
+		return
 	}
-}
-
-func handleIncomingRequest(client *Client) {
-	defer client.conn.Close()
-	client.conn.Write([]byte("Please enter your name: "))
-	name := []byte{}
+	go broadcaster()
 	for {
-		buffer := make([]byte, 1)
-		n, err := client.conn.Read(buffer)
+		conn, err := listener.Accept()
 		if err != nil {
-			handleErrors(err)
-			break
-		}
-		if n == 0 {
-			// No data was read; continue to read.
-			continue
-		}
-
-		if buffer[0] == '\n' {
-			// If a newline character is encountered, stop reading.
-			break
-		}
-
-		name = append(name, buffer[0])
-	}
-
-	client.name = string(name)
-	clientMux.Lock()
-	clients[client] = true
-	clientMux.Unlock()
-	// client.conn.Write([]byte(fmt.Sprintf("%s has joined the caht", client.name)))
-	broadcast(fmt.Sprintf("%s has joined the chat", client.name), &Client{})
-	go client.receiveMessages()
-
-	for msg := range client.msgCh {
-		_, err := client.conn.Write([]byte(msg))
-		if err != nil {
-			break
-		}
-	}
-	clientMux.Lock()
-	delete(clients, client)
-	clientMux.Unlock()
-	broadcast(fmt.Sprintf("%s has left the chat", client.name), &Client{})
-}
-
-func (client *Client) receiveMessages() {
-	// scanner := bufio.NewScanner(client.conn)
-
-
-
-	for {
-		timestap := time.Now().Format("02-Jan-06 15:04:05 MST")
-		// fmt.Println(buffer)
-		client.conn.Write([]byte(fmt.Sprintf("[%s][%s]: ", string(client.name), timestap)))
-		buffer := make([]byte, 1024)
-		_, err := client.conn.Read(buffer)
-		if err != nil {
-			broadcast(fmt.Sprintf("%s has left the chat", client.name), &Client{})
+			fmt.Println("error with accepting")
 			return
 		}
-		
-		broadcast(fmt.Sprintf("[%s][%s]:%s\n", client.name, timestap,  string(buffer)), client)
+		go handleClient(conn)
 	}
-
-	
 }
 
-func broadcast(message string, currentClient *Client) {
-	clientMux.Lock()
-	defer clientMux.Unlock()
-	for client := range clients {
-		if client != currentClient {
-			select {
-			case client.msgCh <- message:
-				// fmt.Println("send messages")
-			default:
-				// fmt.Printf("Failed to send message to client %s\n", client.name)
+func broadcaster() {
+	for {
+		msg := <-messages
+		for client := range clients {
+			if msg.Sender != client {
+				_, err := client.Writer.WriteString(msg.Message)
+				if err != nil {
+					fmt.Println("Error broadcasting")
+					os.Exit(1)
+				}
+				err = client.Writer.Flush()
+				if err != nil {
+					fmt.Println("Error flushing")
+					os.Exit(1)
+				}
 			}
+
 		}
 	}
-	//close(currentClient.msgCh)
 }
 
-func handleErrors(err error) {
+func handleClient(conn net.Conn) {
+	defer conn.Close()
+	var welcome string = `
+Welcome to TCP-Chat!
+         _nnnn_
+        dGGGGMMb
+       @p~qp~~qMb
+       M|@||@) M|
+       @,----.JM|
+      JS^\__/  qKL
+     dZP        qKRb
+    dZP          qKKb
+   fZP            SMMb
+   HZM            MMMM
+   FqM            MMMM
+ __| ".        |\dS"qML
+ |    '.       | '' \Zq
+_)      \.___.,|     .'
+\____   )MMMMMP|   .'
+     '-'       '--'
+`
+	_, err := conn.Write([]byte(welcome))
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Error writing message")
+		os.Exit(1)
+	}
+	_, err = conn.Write([]byte("please enter your name : "))
+	if err != nil {
+		fmt.Println("Error writing message")
+		os.Exit(1)
+	}
+	nameBuffer := make([]byte, 1024)
+	length, err := conn.Read(nameBuffer)
+	nameBuffer = nameBuffer[:length-1]
+	if err != nil {
+		fmt.Println("Error reading user name")
+		os.Exit(1)
+	}
+	writer := bufio.NewWriter(conn)
+	client := &Client{
+		Name:   string(nameBuffer),
+		Writer: writer,
+	}
+	// adding clients
+	serverMux.Lock()
+	clients[client] = true
+	serverMux.Unlock()
+	reader := bufio.NewReader(conn)
+	for {
+
+		sendPrompt(client)
+		message, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				fmt.Printf("Client %s disconnected.\n", nameBuffer)
+			} else {
+				fmt.Printf("Error reading from client %s: %s\n", nameBuffer, err)
+			}
+			break
+		}
+		message = strings.Trim(message, "\r\n") // Trim the message
+
+		if message != "" {
+
+			//formattedMessage := fmt.Sprintf("\n[%s] [%s]: %s\n", time.Now().Format("02-Jan-06 15:04:05 MST"), nameBuffer, message)
+			msg := &Message{Message: message, Sender: client}
+			messages <- *msg
+		}
+		sendPrompt(client)
+	}
+
+	serverMux.Lock()
+	delete(clients, client)
+	serverMux.Unlock()
+	messages <- Message{client.Name + " has left the chat.", client}
+}
+
+func sendPrompt(client *Client) {
+	timestamp := time.Now().Format("02-Jan-06 15:04:05 MST")
+	_, err := client.Writer.WriteString(fmt.Sprintf("[%s][%s]:", timestamp, client.Name))
+	if err != nil {
+		fmt.Println("Error writing string")
+		os.Exit(1)
+	}
+	err = client.Writer.Flush()
+	if err != nil {
+		fmt.Println("Error flushing")
+		os.Exit(1)
 	}
 }
