@@ -25,6 +25,7 @@ var (
 	clients   = make(map[*Client]bool)
 	serverMux = &sync.Mutex{}
 	messages  = make(chan Message)
+	history   = []string{}
 )
 
 func main() {
@@ -60,8 +61,8 @@ func broadcaster() {
 					fmt.Println("Error flushing")
 					os.Exit(1)
 				}
+				sendPrompt(client)
 			}
-
 		}
 	}
 }
@@ -113,6 +114,8 @@ _)      \.___.,|     .'
 	serverMux.Lock()
 	clients[client] = true
 	serverMux.Unlock()
+	messages <- Message{"\n" + client.Name + " has joined the chat.\n", client}
+	showHistory(client)
 	reader := bufio.NewReader(conn)
 	for {
 
@@ -130,17 +133,20 @@ _)      \.___.,|     .'
 
 		if message != "" {
 
-			//formattedMessage := fmt.Sprintf("\n[%s] [%s]: %s\n", time.Now().Format("02-Jan-06 15:04:05 MST"), nameBuffer, message)
-			msg := &Message{Message: message, Sender: client}
+			formattedMessage := fmt.Sprintf("\n[%s] [%s]: %s\n", time.Now().Format("02-Jan-06 15:04:05 MST"), nameBuffer, message)
+			msg := &Message{Message: formattedMessage, Sender: client}
+			serverMux.Lock()
+			history = append(history, formattedMessage)
+			serverMux.Unlock()
 			messages <- *msg
 		}
-		sendPrompt(client)
+
 	}
 
 	serverMux.Lock()
 	delete(clients, client)
 	serverMux.Unlock()
-	messages <- Message{client.Name + " has left the chat.", client}
+	messages <- Message{"\n" + client.Name + " has left the chat.\n", client}
 }
 
 func sendPrompt(client *Client) {
@@ -155,4 +161,13 @@ func sendPrompt(client *Client) {
 		fmt.Println("Error flushing")
 		os.Exit(1)
 	}
+}
+
+func showHistory(client *Client){
+	for _, msg := range history{
+	    msg= strings.Trim(msg , "\n")
+		client.Writer.WriteString(msg)
+		
+	}
+	client.Writer.Flush()
 }
