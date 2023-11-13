@@ -9,10 +9,11 @@ import (
 var usage = "[USAGE]: ./TCPChat $port"
 
 func main() {
-	err := app.CheckArgs(os.Args)
-	if err != nil {
+	port := app.CheckArgs(os.Args)
+	if port == "" {
 		fmt.Println(usage)
 		return
 	}
-	app.Start()
+	server := app.NewServer(port)
+	server.Start()
 }

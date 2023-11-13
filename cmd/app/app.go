@@ -2,7 +2,6 @@ package app
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -12,63 +11,43 @@ import (
 	"time"
 )
 
-type Client struct {
-	Name   string
-	Writer *bufio.Writer
-}
+var mux = &sync.Mutex{}
 
-type Message struct {
-	Message string
-	Sender  *Client
-}
-
-
-var (
-	clients   = make(map[*Client]bool)
-	serverMux = &sync.Mutex{}
-	messages  = make(chan Message)
-	history   = []string{}
-	defaultPort = "3000"	
-)
-
-
-
-func CheckArgs(args []string) error{
-	switch len(args){
-	case 2 :
-		defaultPort = args[1]
-	case 1 :
-		defaultPort = "3000"
+func CheckArgs(args []string) string {
+	var port string
+	switch len(args) {
+	case 2:
+		port = args[1]
+	case 1:
+		port = "3000"
 	default:
-		return errors.New("Invalid Usage")
+		return ""
 	}
-	return  nil
+	return port
 }
 
-
-func Start(){
-	listener, err := net.Listen("tcp", ":" + defaultPort)
+func (s *Server) Start() {
+	listener, err := net.Listen("tcp", ":"+s.Port)
 	defer listener.Close()
 	if err != nil {
 		fmt.Println("error with listening")
 		return
 	}
-	go broadcaster()
+	go s.broadcaster()
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			fmt.Println("error with accepting")
 			return
 		}
-		go handleClient(conn)
+		go s.handleClient(conn)
 	}
 }
 
-
-func broadcaster() {
+func (s *Server) broadcaster() {
 	for {
-		msg := <-messages
-		for client := range clients {
+		msg := <-s.messages
+		for client := range s.clients {
 			if msg.Sender != client {
 				_, err := client.Writer.WriteString(msg.Message)
 				if err != nil {
@@ -86,7 +65,7 @@ func broadcaster() {
 	}
 }
 
-func handleClient(conn net.Conn) {
+func (s *Server) handleClient(conn net.Conn) {
 	defer conn.Close()
 	var welcome string = `
 Welcome to TCP-Chat!
@@ -129,7 +108,7 @@ _)      \.___.,|     .'
 		Name:   string(nameBuffer),
 		Writer: writer,
 	}
-	joinedChat(client)
+	s.joinedChat(client)
 
 	reader := bufio.NewReader(conn)
 	for {
@@ -150,40 +129,39 @@ _)      \.___.,|     .'
 
 			formattedMessage := fmt.Sprintf("\n[%s] [%s]: %s\n", time.Now().Format("02-Jan-06 15:04:05 MST"), nameBuffer, message)
 			msg := &Message{Message: formattedMessage, Sender: client}
-			serverMux.Lock()
-			history = append(history, formattedMessage)
-			serverMux.Unlock()
-			messages <- *msg
+			mux.Lock()
+			s.history = append(s.history, formattedMessage)
+			mux.Unlock()
+			s.messages <- *msg
 		}
 
 	}
 
-	leftChat(client)
-	
+	s.leftChat(client)
 }
 
-func addClient(client *Client){
-		// adding clients
-		serverMux.Lock()
-		clients[client] = true
-		serverMux.Unlock()
+func (s *Server) addClient(client *Client) {
+	// adding clients
+	mux.Lock()
+	s.clients[client] = true
+	mux.Unlock()
 }
 
-func deleteClient(client *Client){
-	serverMux.Lock()
-	delete(clients, client)
-	serverMux.Unlock()
+func (s *Server) deleteClient(client *Client) {
+	mux.Lock()
+	delete(s.clients, client)
+	mux.Unlock()
 }
 
-func joinedChat(client *Client){
-	addClient(client)
-	messages <- Message{"\n" + client.Name + " has joined the chat.\n", client}
-	showHistory(client)
+func (s *Server) joinedChat(client *Client) {
+	s.addClient(client)
+	s.messages <- Message{"\n" + client.Name + " has joined the chat.\n", client}
+	s.showHistory(client)
 }
 
-func leftChat(client *Client){
-	deleteClient(client)
-	messages <- Message{"\n" + client.Name + " has left the chat.\n", client}
+func (s *Server) leftChat(client *Client) {
+	s.deleteClient(client)
+	s.messages <- Message{"\n" + client.Name + " has left the chat.\n", client}
 }
 
 func sendPrompt(client *Client) {
@@ -200,11 +178,11 @@ func sendPrompt(client *Client) {
 	}
 }
 
-func showHistory(client *Client){
-	for _, msg := range history{
-	    msg= strings.Trim(msg , "\n")
+func (s *Server) showHistory(client *Client) {
+	for _, msg := range s.history {
+		msg = strings.Trim(msg, "\n")
 		client.Writer.WriteString(msg)
-		
+
 	}
 	client.Writer.Flush()
 }
