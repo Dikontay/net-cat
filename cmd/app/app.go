@@ -1,4 +1,4 @@
-package server
+package app
 
 import (
 	"bufio"
@@ -22,14 +22,13 @@ type Message struct {
 	Sender  *Client
 }
 
+
 var (
 	clients   = make(map[*Client]bool)
 	serverMux = &sync.Mutex{}
 	messages  = make(chan Message)
 	history   = []string{}
-	defaultPort = "3000"
-	connType = "tcp"
-	
+	defaultPort = "3000"	
 )
 
 
@@ -48,7 +47,7 @@ func CheckArgs(args []string) error{
 
 
 func Start(){
-	listener, err := net.Listen(connType, ":" + defaultPort)
+	listener, err := net.Listen("tcp", ":" + defaultPort)
 	defer listener.Close()
 	if err != nil {
 		fmt.Println("error with listening")
