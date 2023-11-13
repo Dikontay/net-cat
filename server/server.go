@@ -1,7 +1,8 @@
-package main
+package server
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -26,10 +27,28 @@ var (
 	serverMux = &sync.Mutex{}
 	messages  = make(chan Message)
 	history   = []string{}
+	defaultPort = "3000"
+	connType = "tcp"
+	
 )
 
-func main() {
-	listener, err := net.Listen("tcp", ":3000")
+
+
+func CheckArgs(args []string) error{
+	switch len(args){
+	case 2 :
+		defaultPort = args[1]
+	case 1 :
+		defaultPort = "3000"
+	default:
+		return errors.New("Invalid Usage")
+	}
+	return  nil
+}
+
+
+func Start(){
+	listener, err := net.Listen(connType, ":" + defaultPort)
 	defer listener.Close()
 	if err != nil {
 		fmt.Println("error with listening")
@@ -45,6 +64,7 @@ func main() {
 		go handleClient(conn)
 	}
 }
+
 
 func broadcaster() {
 	for {
@@ -110,12 +130,8 @@ _)      \.___.,|     .'
 		Name:   string(nameBuffer),
 		Writer: writer,
 	}
-	// adding clients
-	serverMux.Lock()
-	clients[client] = true
-	serverMux.Unlock()
-	messages <- Message{"\n" + client.Name + " has joined the chat.\n", client}
-	showHistory(client)
+	joinedChat(client)
+
 	reader := bufio.NewReader(conn)
 	for {
 
@@ -123,9 +139,9 @@ _)      \.___.,|     .'
 		message, err := reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
-				fmt.Printf("Client %s disconnected.\n", nameBuffer)
+				fmt.Printf("Client %s disconnected.\n", client.Name)
 			} else {
-				fmt.Printf("Error reading from client %s: %s\n", nameBuffer, err)
+				fmt.Printf("Error reading from client %s: %s\n", client.Name, err)
 			}
 			break
 		}
@@ -143,9 +159,31 @@ _)      \.___.,|     .'
 
 	}
 
+	leftChat(client)
+	
+}
+
+func addClient(client *Client){
+		// adding clients
+		serverMux.Lock()
+		clients[client] = true
+		serverMux.Unlock()
+}
+
+func deleteClient(client *Client){
 	serverMux.Lock()
 	delete(clients, client)
 	serverMux.Unlock()
+}
+
+func joinedChat(client *Client){
+	addClient(client)
+	messages <- Message{"\n" + client.Name + " has joined the chat.\n", client}
+	showHistory(client)
+}
+
+func leftChat(client *Client){
+	deleteClient(client)
 	messages <- Message{"\n" + client.Name + " has left the chat.\n", client}
 }
 
