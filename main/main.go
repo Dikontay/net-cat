@@ -14,6 +14,7 @@ func main() {
 		fmt.Println(usage)
 		return
 	}
+	fmt.Printf("Starting server on port %s\n", port)
 	server := app.NewServer(port)
 	server.Start()
 }

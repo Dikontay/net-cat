@@ -35,6 +35,10 @@ func (s *Server) Start() {
 	}
 	go s.broadcaster()
 	for {
+		if len(s.clients) == 5 {
+			fmt.Println("Maximum 10 connections available")
+			return
+		}
 		conn, err := listener.Accept()
 		if err != nil {
 			fmt.Println("error with accepting")
@@ -109,7 +113,7 @@ _)      \.___.,|     .'
 		Writer: writer,
 	}
 	s.joinedChat(client)
-
+	fmt.Println(len(s.clients))
 	reader := bufio.NewReader(conn)
 	for {
 
@@ -139,6 +143,8 @@ _)      \.___.,|     .'
 
 	s.leftChat(client)
 }
+
+//func ()
 
 func (s *Server) addClient(client *Client) {
 	// adding clients
@@ -180,9 +186,10 @@ func sendPrompt(client *Client) {
 
 func (s *Server) showHistory(client *Client) {
 	for _, msg := range s.history {
-		msg = strings.Trim(msg, "\n")
+		//msg = strings.Trim(msg, "\n")
 		client.Writer.WriteString(msg)
+		client.Writer.Flush()
 
 	}
-	client.Writer.Flush()
+
 }
