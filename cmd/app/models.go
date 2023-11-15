@@ -3,6 +3,7 @@ package app
 import (
 	"bufio"
 	"net"
+	"sync"
 )
 
 type Server struct {
@@ -11,6 +12,7 @@ type Server struct {
 	clients  map[*Client]bool
 	messages chan Message
 	history  []string
+	mux *sync.Mutex
 }
 
 type Client struct {
@@ -30,6 +32,7 @@ func NewServer(port string) *Server {
 		clients:  make(map[*Client]bool),
 		messages: make(chan Message),
 		history:  []string{},
+		mux: &sync.Mutex{},
 	}
 }
 

@@ -7,11 +7,10 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync"
 	"time"
 )
 
-var mux = &sync.Mutex{}
+// var mux = &sync.Mutex{}
 
 func (s *Server) Start() {
 	listener, err := net.Listen("tcp", ":"+s.Port)
@@ -97,32 +96,37 @@ func (s *Server) handleClient(conn net.Conn) {
 
 func (s *Server) addClient(client *Client) {
 	// adding clients
-	mux.Lock()
+	s.mux.Lock()
 	s.clients[client] = true
-	mux.Unlock()
+	s.mux.Unlock()
 }
 
 func (s *Server) deleteClient(client *Client) {
-	mux.Lock()
+	s.mux.Lock()
 	delete(s.clients, client)
-	mux.Unlock()
+	s.mux.Unlock()
 }
 
 func (s *Server) addToHistory(message string) {
-	mux.Lock()
+	s.mux.Lock()
 	s.history = append(s.history, message)
-	mux.Unlock()
+	s.mux.Unlock()
 }
 
 func (s *Server) joinedChat(client *Client) {
 	s.addClient(client)
-	s.messages <- Message{"\n" + client.Name + " has joined the chat.\n", client}
+	msg := "\n" + client.Name + " has joined the chat.\n"
+	s.messages <- Message{msg, client}
+	
 	s.showHistory(client)
+	s.addToHistory(msg)
 }
 
 func (s *Server) leftChat(client *Client) {
 	s.deleteClient(client)
+	msg := "\n" + client.Name + " has left the chat.\n"
 	s.messages <- Message{"\n" + client.Name + " has left the chat.\n", client}
+	s.addToHistory(msg)
 }
 
 func (s *Server) showHistory(client *Client) {
@@ -140,5 +144,4 @@ func (s *Server) showHistory(client *Client) {
 		}
 
 	}
-
 }

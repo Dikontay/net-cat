@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-var usage = "[USAGE]: ./TCPChat $port"
+const usage = "[USAGE]: ./TCPChat $port"
 
 func main() {
 	port := app.CheckArgs(os.Args)
